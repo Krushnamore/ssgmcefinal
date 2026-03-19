@@ -153,13 +153,22 @@ io.on('connection', (socket) => {
     socket.join(`buyer_${buyerId}`)
   })
 
-  // 1-to-1 call: join private room for isolated chat
-  socket.on('join_call_room', ({ roomId }) => {
+  // 1-to-1 call: join private room + WebRTC signaling
+  socket.on('join_call_room', ({ roomId, userId }) => {
     socket.join(`call_room_${roomId}`)
+    // Notify the other person in the room that someone joined
+    socket.to(`call_room_${roomId}`).emit('webrtc_user_joined', { userId, socketId: socket.id })
   })
+
   socket.on('leave_call_room', ({ roomId }) => {
     socket.leave(`call_room_${roomId}`)
+    socket.to(`call_room_${roomId}`).emit('webrtc_user_left', { socketId: socket.id })
   })
+
+  // WebRTC signaling — relay only to call room
+  socket.on('webrtc_offer',  ({ roomId, offer })     => socket.to(`call_room_${roomId}`).emit('webrtc_offer',  { offer }))
+  socket.on('webrtc_answer', ({ roomId, answer })    => socket.to(`call_room_${roomId}`).emit('webrtc_answer', { answer }))
+  socket.on('webrtc_ice',    ({ roomId, candidate }) => socket.to(`call_room_${roomId}`).emit('webrtc_ice',    { candidate }))
 
   // 1-to-1 call chat — ONLY sends to call_room participants, not broadcast
   socket.on('call_chat_send', ({ roomId, msg }) => {
