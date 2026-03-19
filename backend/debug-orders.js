@@ -3,17 +3,22 @@ const { getPool } = require('./config/db')
 
 async function debug() {
   const pool = getPool()
-  const [orders] = await pool.execute('SELECT id, buyer_id, status, SUBSTRING(items, 1, 500) as items_preview FROM orders ORDER BY id DESC')
-  
-  console.log('\n=== ORDERS IN DB ===')
+
+  // Show users
+  const [users] = await pool.execute("SELECT id, name, email, role FROM users WHERE role IN ('seller','buyer')")
+  console.log('\n=== USERS ===')
+  users.forEach(u => console.log(`  id:${u.id} | ${u.role} | ${u.name} | ${u.email}`))
+
+  // Show orders with sellerId
+  const [orders] = await pool.execute('SELECT id, buyer_id, status, items FROM orders ORDER BY id DESC')
+  console.log('\n=== ORDERS ===')
   for (const o of orders) {
-    console.log(`\nOrder #${o.id} | buyer:${o.buyer_id} | ${o.status}`)
     try {
-      const items = JSON.parse(o.items_preview + (o.items_preview.endsWith(']') ? '' : '...'))
-      items.forEach(i => console.log(`  Item: ${i.name} | sellerId: ${i.sellerId} | price: ${i.price}`))
-    } catch {
-      console.log('  items preview:', o.items_preview?.substring(0,100))
-    }
+      const items = JSON.parse(o.items)
+      const sellerIds = [...new Set(items.map(i => i.sellerId))]
+      console.log(`Order #${o.id} | buyer:${o.buyer_id} | ${o.status} | sellerIds:[${sellerIds}]`)
+      items.forEach(i => console.log(`  - ${i.name} | sellerId:${i.sellerId} | ₹${i.price}`))
+    } catch { console.log(`Order #${o.id} - parse error`) }
   }
   process.exit(0)
 }
