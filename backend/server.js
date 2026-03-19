@@ -164,3 +164,17 @@ server.listen(PORT, () => {
 })
 
 module.exports = { app, server, io }
+// TEMP DEBUG — remove after testing
+app.get('/api/debug/orders', async (req, res) => {
+  try {
+    const { getPool } = require('./config/db')
+    const pool = getPool()
+    const [rows] = await pool.execute('SELECT id, buyer_id, items, status FROM orders ORDER BY id DESC LIMIT 5')
+    res.json({ orders: rows.map(r => ({
+      id: r.id,
+      buyer_id: r.buyer_id,
+      status: r.status,
+      items: (() => { try { return JSON.parse(r.items) } catch { return r.items } })()
+    }))})
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
