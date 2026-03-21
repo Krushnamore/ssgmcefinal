@@ -30,3 +30,15 @@ Thumbs.db
 *.key
 *.p12
 *.pfx
+
+# Debug files
+backend/debug-orders.js
+backend/test-login.js
+backend/reset-admin.js
+backend/fix-orders.js
+backend/fix-images.sql
+backend/fix-image-column.sql
+backend/fix-admin-status.sql
+backend/clear-seed-products.sql
+backend/clean-db.sql
+backend/add-notifications.sql
