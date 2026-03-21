@@ -1,32 +1,79 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ShoppingCart, Sparkles, Star, ArrowLeft, Package, Truck, Shield, Heart, Video, X, Phone } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useCart } from '../../context/CartContext'
 import { useAuth } from '../../context/AuthContext'
 import { io } from 'socket.io-client'
 import api from '../../api'
 import VideoCallModal from '../../components/videocall/VideoCallModal'
+import { BodyTryOn, FaceTryOn, RoomPlacement, ProductViewer3D } from '../../components/ar/ARComponents'
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
+
+const AR_LABEL = {
+  body:  'Body Try-On',
+  face:  'Face Try-On',
+  room:  'Room Placement',
+  '3d':  '3D View',
+  shoes: 'Shoe Try-On',
+}
+
+/* ── AR Fullscreen Modal ─────────────────────────── */
+function ARModal({ product, onClose }) {
+  const mode = product?.ar_mode
+  const props = { product, onClose }
+
+  const content = (
+    <div style={{ position:'fixed', inset:0, zIndex:9998, background:'#000', display:'flex', flexDirection:'column' }}>
+      {/* Close button */}
+      <div style={{ position:'absolute', top:16, right:16, zIndex:10 }}>
+        <button onClick={onClose}
+          style={{ width:40, height:40, borderRadius:'50%', background:'rgba(0,0,0,0.6)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <X size={20} color="#fff"/>
+        </button>
+      </div>
+      {/* AR label */}
+      <div style={{ position:'absolute', top:16, left:16, zIndex:10 }}>
+        <span style={{ background:'rgba(0,0,0,0.6)', color:'#fff', fontSize:13, fontWeight:600, padding:'6px 14px', borderRadius:20 }}>
+          ✨ {AR_LABEL[mode] || '3D View'} — {product.name}
+        </span>
+      </div>
+      {/* AR Component */}
+      <div style={{ flex:1 }}>
+        {(mode === 'body' || mode === 'shoes') && <BodyTryOn {...props}/>}
+        {mode === 'face' && <FaceTryOn {...props}/>}
+        {mode === 'room' && <RoomPlacement {...props}/>}
+        {(mode === '3d' || !mode) && <ProductViewer3D {...props}/>}
+      </div>
+    </div>
+  )
+
+  return createPortal(content, document.body)
+}
 
 export default function BuyerProductDetail() {
   const { id } = useParams()
   const { addItem } = useCart()
   const { user } = useAuth()
-  const [product, setProduct]           = useState(null)
-  const [loading, setLoading]           = useState(true)
+
+  const [product, setProduct]       = useState(null)
+  const [loading, setLoading]       = useState(true)
   const [selectedColor, setSelectedColor] = useState(null)
-  const [selectedSize, setSelectedSize]   = useState(null)
-  const [qty, setQty]       = useState(1)
-  const [added, setAdded]   = useState(false)
-  const [wished, setWished] = useState(false)
+  const [selectedSize,  setSelectedSize]  = useState(null)
+  const [qty,     setQty]     = useState(1)
+  const [added,   setAdded]   = useState(false)
+  const [wished,  setWished]  = useState(false)
   const [related, setRelated] = useState([])
 
+  // AR state
+  const [showAR, setShowAR] = useState(false)
+
   // Video call states
-  const [callStatus, setCallStatus]   = useState(null) // null | 'requesting' | 'waiting' | 'active' | 'rejected'
+  const [callStatus,    setCallStatus]    = useState(null)
   const [callRequestId, setCallRequestId] = useState(null)
-  const [activeRoomId, setActiveRoomId]   = useState(null)
-  const [callMessage, setCallMessage]     = useState('')
+  const [activeRoomId,  setActiveRoomId]  = useState(null)
+  const [callMessage,   setCallMessage]   = useState('')
   const [showCallModal, setShowCallModal] = useState(false)
   const socketRef = useRef(null)
   const pollRef   = useRef(null)
@@ -38,7 +85,7 @@ export default function BuyerProductDetail() {
         const p = r.data.product
         setProduct(p)
         setSelectedColor(p.colors?.[0] || null)
-        setSelectedSize(p.sizes?.[0] || null)
+        setSelectedSize(p.sizes?.[0]   || null)
         return api.get(`/products?category=${p.category}&limit=4`)
       })
       .then(r => setRelated((r.data.products || []).filter(p => p.id !== parseInt(id))))
@@ -46,19 +93,19 @@ export default function BuyerProductDetail() {
       .finally(() => setLoading(false))
   }, [id])
 
-  // Socket setup for call notifications
+  // Socket for video call
   useEffect(() => {
     if (!user) return
     const socket = io(SOCKET_URL, { transports:['websocket','polling'] })
     socketRef.current = socket
     socket.emit('join_buyer_room', { buyerId: user.id })
-    socket.on('call_accepted', ({ roomId, requestId }) => {
+
+    socket.on('call_accepted', ({ roomId }) => {
       setCallStatus('active')
       setActiveRoomId(roomId)
       setShowCallModal(true)
-      clearInterval(pollRef.current)
-      // Join private call room for isolated chat
       socket.emit('join_call_room', { roomId })
+      clearInterval(pollRef.current)
     })
     socket.on('call_rejected', () => {
       setCallStatus('rejected')
@@ -86,14 +133,12 @@ export default function BuyerProductDetail() {
       if (data.success) {
         setCallRequestId(data.requestId)
         setCallStatus('waiting')
-        // Notify seller via socket
         socketRef.current?.emit('call_request', {
           sellerId:    product.seller_id,
           requestId:   data.requestId,
           buyerName:   user?.name,
           productName: product.name,
         })
-        // Poll for status
         pollRef.current = setInterval(async () => {
           try {
             const r = await api.get(`/videocalls/status/${data.requestId}`)
@@ -134,7 +179,8 @@ export default function BuyerProductDetail() {
     setCallRequestId(null)
   }
 
-  const discount = product?.original_price ? Math.round((1 - product.price / product.original_price) * 100) : null
+  const discount = product?.original_price
+    ? Math.round((1 - product.price / product.original_price) * 100) : null
 
   if (loading) return (
     <div className="space-y-6 animate-pulse">
@@ -150,13 +196,16 @@ export default function BuyerProductDetail() {
     <div className="text-center py-20">
       <p className="text-4xl mb-3">😕</p>
       <p className="font-semibold text-gray-700">Product not found</p>
-      <Link to="/buyer/products" className="btn-primary mt-4 text-sm">Back to Products</Link>
+      <Link to="/buyer/products" className="btn-primary mt-4 text-sm inline-flex">Back to Products</Link>
     </div>
   )
 
   return (
     <>
-      {/* 1-to-1 Video Call Modal */}
+      {/* AR Modal — fullscreen overlay on same page */}
+      {showAR && <ARModal product={product} onClose={() => setShowAR(false)}/>}
+
+      {/* Video Call Modal */}
       {showCallModal && activeRoomId && (
         <VideoCallModal
           roomId={activeRoomId}
@@ -176,23 +225,27 @@ export default function BuyerProductDetail() {
           {/* Image */}
           <div className="space-y-3">
             <div className="relative rounded-2xl overflow-hidden aspect-square bg-gray-100">
-              {product.image_url ? (
-                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover"/>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-6xl">🛍️</div>
-              )}
+              {product.image_url
+                ? <img src={product.image_url} alt={product.name} className="w-full h-full object-cover"/>
+                : <div className="w-full h-full flex items-center justify-center text-6xl">🛍️</div>
+              }
               <div className="absolute top-3 left-3 flex flex-col gap-2">
                 {discount > 0 && <span className="badge bg-brand-500 text-white">-{discount}%</span>}
                 {product.badge && <span className="badge-orange">{product.badge}</span>}
               </div>
-              <button onClick={() => setWished(v=>!v)} className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white shadow-md flex items-center justify-center">
+              <button onClick={() => setWished(v=>!v)}
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white shadow-md flex items-center justify-center">
                 <Heart size={16} className={wished ? 'fill-red-500 text-red-500' : 'text-gray-400'}/>
               </button>
             </div>
-            <Link to={`/buyer/ar/${product.id}`} className="w-full btn-secondary justify-center py-3 text-base font-bold gap-2">
-              <Sparkles size={18} className="text-brand-500"/> Try with AR
-              <span className="badge-orange text-xs">{product.ar_mode?.toUpperCase()}</span>
-            </Link>
+
+            {/* AR Try-On button — opens on THIS page as overlay */}
+            <button
+              onClick={() => setShowAR(true)}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-brand-500 to-purple-500 hover:from-brand-600 hover:to-purple-600 text-white font-bold rounded-2xl text-base transition-all shadow-md"
+            >
+              <Sparkles size={18}/> Try AR — {AR_LABEL[product.ar_mode] || '3D View'}
+            </button>
           </div>
 
           {/* Details */}
@@ -210,8 +263,14 @@ export default function BuyerProductDetail() {
             </div>
 
             <div className="flex items-baseline gap-3">
-              <span className="font-display text-3xl font-bold text-gray-900">₹{Number(product.price).toLocaleString('en-IN')}</span>
-              {product.original_price && <span className="text-lg text-gray-400 line-through">₹{Number(product.original_price).toLocaleString('en-IN')}</span>}
+              <span className="font-display text-3xl font-bold text-gray-900">
+                ₹{Number(product.price).toLocaleString('en-IN')}
+              </span>
+              {product.original_price && (
+                <span className="text-lg text-gray-400 line-through">
+                  ₹{Number(product.original_price).toLocaleString('en-IN')}
+                </span>
+              )}
               {discount > 0 && <span className="badge bg-green-100 text-green-700">{discount}% OFF</span>}
             </div>
 
@@ -220,7 +279,8 @@ export default function BuyerProductDetail() {
                 <p className="label">Color</p>
                 <div className="flex gap-2 flex-wrap">
                   {product.colors.map(c => (
-                    <button key={c} onClick={() => setSelectedColor(c)} style={{backgroundColor:c}}
+                    <button key={c} onClick={() => setSelectedColor(c)}
+                      style={{backgroundColor:c}}
                       className={`w-8 h-8 rounded-full border-2 transition-all ${selectedColor===c?'border-brand-500 scale-110 shadow-md':'border-gray-200'}`}/>
                   ))}
                 </div>
@@ -247,59 +307,56 @@ export default function BuyerProductDetail() {
                 <span className="px-4 py-2.5 text-sm font-semibold">{qty}</span>
                 <button onClick={() => setQty(q=>q+1)} className="px-3 py-2.5 hover:bg-gray-50 font-bold">+</button>
               </div>
-              <button onClick={() => { addItem(product, qty, {color:selectedColor, size:selectedSize}); setAdded(true); setTimeout(()=>setAdded(false),2000) }}
+              <button
+                onClick={() => { addItem(product, qty, {color:selectedColor, size:selectedSize}); setAdded(true); setTimeout(()=>setAdded(false),2000) }}
                 className={`flex-1 btn-primary justify-center py-3 text-base transition-all ${added?'bg-green-500 hover:bg-green-500':''}`}>
                 <ShoppingCart size={18}/> {added ? '✓ Added!' : 'Add to Cart'}
               </button>
             </div>
 
-            {/* ── Video Call Request Button ── */}
+            {/* Video Call Request */}
             <div className="border border-gray-200 rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Video size={16} className="text-brand-500"/>
                 <p className="font-semibold text-gray-800 text-sm">Ask the Seller via Video Call</p>
               </div>
-              <p className="text-xs text-gray-500">Request a live 1-to-1 video call with the seller to ask questions about this product.</p>
+              <p className="text-xs text-gray-500">Request a live 1-to-1 video call with the seller.</p>
 
               {callStatus === null && (
                 <>
                   <input className="input text-sm" placeholder="Optional: what do you want to ask?"
                     value={callMessage} onChange={e => setCallMessage(e.target.value)}/>
                   <button onClick={requestCall}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl text-sm transition-all">
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl text-sm">
                     <Phone size={14}/> Request Video Call
                   </button>
                 </>
               )}
-
               {callStatus === 'requesting' && (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <span className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"/>
                   Sending request...
                 </div>
               )}
-
               {callStatus === 'waiting' && (
                 <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-xl border border-yellow-200">
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-yellow-400 animate-pulse"/>
-                    <span className="text-sm font-semibold text-yellow-700">Waiting for seller to accept...</span>
+                    <span className="text-sm font-semibold text-yellow-700">Waiting for seller...</span>
                   </div>
                   <button onClick={cancelRequest} className="text-xs text-red-500 hover:underline flex items-center gap-1">
                     <X size={12}/> Cancel
                   </button>
                 </div>
               )}
-
               {callStatus === 'rejected' && (
                 <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-sm text-red-600 font-semibold text-center">
                   ✗ Seller declined the call
                 </div>
               )}
-
               {callStatus === 'active' && (
                 <div className="p-3 bg-green-50 rounded-xl border border-green-200 text-sm text-green-700 font-semibold text-center">
-                  ✓ Call in progress — check video window
+                  ✓ Call in progress
                 </div>
               )}
             </div>

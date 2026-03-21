@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { ShoppingBag, Home, Grid, Sparkles, Video, ShoppingCart, ClipboardList, LogOut, Menu, X, User } from 'lucide-react'
+import { ShoppingBag, Home, Grid, Video, ShoppingCart, ClipboardList, LogOut, Menu, X, User } from 'lucide-react'
 import NotificationBell from '../ui/NotificationBell'
 import { useAuth } from '../../context/AuthContext'
 import { useCart } from '../../context/CartContext'
@@ -8,7 +8,6 @@ import { useCart } from '../../context/CartContext'
 const navItems = [
   { to:'/buyer',           icon:Home,          label:'Home',       end:true },
   { to:'/buyer/products',  icon:Grid,          label:'Products' },
-  { to:'/buyer/ar/1',      icon:Sparkles,      label:'AR Try-On' },
   { to:'/buyer/live',      icon:Video,         label:'Live Sessions' },
   { to:'/buyer/cart',      icon:ShoppingCart,  label:'My Cart' },
   { to:'/buyer/orders',    icon:ClipboardList, label:'My Orders' },

@@ -13,7 +13,6 @@ import BuyerLayout      from './components/layout/BuyerLayout'
 import BuyerHome        from './pages/buyer/BuyerHome'
 import BuyerProducts    from './pages/buyer/BuyerProducts'
 import BuyerProductDetail from './pages/buyer/BuyerProductDetail'
-import BuyerARTryOn     from './pages/buyer/BuyerARTryOn'
 import BuyerLiveSession from './pages/buyer/BuyerLiveSession'
 import BuyerCart        from './pages/buyer/BuyerCart'
 import BuyerCheckout    from './pages/buyer/BuyerCheckout'
@@ -71,7 +70,6 @@ const AppRoutes = () => {
         <Route index                  element={<BuyerHome/>}/>
         <Route path="products"        element={<BuyerProducts/>}/>
         <Route path="products/:id"    element={<BuyerProductDetail/>}/>
-        <Route path="ar/:id"          element={<BuyerARTryOn/>}/>
         <Route path="live"            element={<BuyerLiveSession/>}/>
         <Route path="cart"            element={<BuyerCart/>}/>
         <Route path="checkout"        element={<BuyerCheckout/>}/>
