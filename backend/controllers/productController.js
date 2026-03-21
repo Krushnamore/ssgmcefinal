@@ -146,9 +146,17 @@ exports.updateProduct = async (req, res) => {
 exports.deleteProduct = async (req, res) => {
   try {
     const pool = getPool()
-    await pool.query('UPDATE products SET active = 0 WHERE id = ?', [req.params.id])
-    return res.json({ success: true, message: 'Product removed' })
+    // Sellers can only delete their own products; admins can delete any
+    if (req.user.role === 'seller') {
+      const [rows] = await pool.execute('SELECT seller_id FROM products WHERE id = ?', [req.params.id])
+      if (!rows.length) return res.status(404).json({ success: false, message: 'Product not found' })
+      if (rows[0].seller_id !== req.user.id)
+        return res.status(403).json({ success: false, message: 'You can only delete your own products' })
+    }
+    await pool.execute('DELETE FROM products WHERE id = ?', [req.params.id])
+    return res.json({ success: true, message: 'Product deleted' })
   } catch (err) {
+    console.error('Delete product error:', err.message)
     return res.status(500).json({ success: false, message: 'Failed to delete product' })
   }
 }

@@ -3,16 +3,18 @@ import api from '../api'
 
 const AuthContext = createContext(null)
 
-const DEMO_USERS = {
-  buyer:  { id: 3, name: 'Demo Buyer',  email: 'buyer@vivmart.com',  role: 'buyer'  },
-  seller: { id: 2, name: 'Demo Seller', email: 'seller@vivmart.com', role: 'seller' },
-  admin:  { id: 1, name: 'Admin User',  email: 'admin@vivmart.com',  role: 'admin'  },
+// Restore user from localStorage immediately - no async check
+const getStoredUser = () => {
+  try {
+    const token = localStorage.getItem('vivmart_token')
+    const u     = localStorage.getItem('vivmart_user')
+    if (token && u) return JSON.parse(u)
+  } catch {}
+  return null
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('vivmart_user')) } catch { return null }
-  })
+  const [user,    setUser]    = useState(getStoredUser)  // restore immediately
   const [loading, setLoading] = useState(false)
 
   const saveUser = (u, token) => {
@@ -21,7 +23,12 @@ export function AuthProvider({ children }) {
     setUser(u)
   }
 
-  // ── Login ───────────────────────────────────────────────────────
+  const clearAll = () => {
+    localStorage.removeItem('vivmart_token')
+    localStorage.removeItem('vivmart_user')
+    setUser(null)
+  }
+
   const login = async (email, password) => {
     setLoading(true)
     try {
@@ -36,11 +43,11 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ── Register ────────────────────────────────────────────────────
   const register = async (name, email, password, role = 'buyer') => {
     setLoading(true)
     try {
       const { data } = await api.post('/auth/register', { name, email, password, role })
+      if (data.pending) return { pending: true }
       if (data.success) {
         saveUser(data.user, data.token)
         return data.user
@@ -51,37 +58,11 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ── Demo Login (SYNC — keeps LoginPage working unchanged) ───────
-  const demoLogin = (role) => {
-    const u = DEMO_USERS[role]
-    // Set immediately so navigation is instant
-    localStorage.setItem('vivmart_user', JSON.stringify(u))
-    setUser(u)
-    // Get real token in background
-    api.post('/auth/login', {
-      email:    u.email,
-      password: 'demo1234',
-    }).then(({ data }) => {
-      if (data.success) saveUser(data.user, data.token)
-    }).catch(() => {})
-    return u
-  }
-
-  // ── Logout ──────────────────────────────────────────────────────
-  const logout = () => {
-    localStorage.removeItem('vivmart_token')
-    localStorage.removeItem('vivmart_user')
-    setUser(null)
-  }
+  const logout = () => clearAll()
 
   return (
     <AuthContext.Provider value={{
-      user,
-      loading,
-      login,
-      register,
-      logout,
-      demoLogin,
+      user, loading, login, register, logout,
       isAuthenticated: !!user,
     }}>
       {children}

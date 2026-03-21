@@ -84,8 +84,13 @@ export default function SellerProducts() {
   }
 
   const handleDelete = async id => {
-    if (!confirm('Remove this product?')) return
-    try { await api.delete(`/products/${id}`); fetchProducts() } catch {}
+    if (!confirm('Delete this product permanently?')) return
+    try {
+      await api.delete(`/products/${id}`)
+      fetchProducts()
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Failed to delete product')
+    }
   }
 
   const filtered = products.filter(p => !search || p.name?.toLowerCase().includes(search.toLowerCase()))

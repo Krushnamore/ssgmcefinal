@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs')
 const jwt    = require('jsonwebtoken')
 const { validationResult } = require('express-validator')
 const { getPool } = require('../config/db')
+const { notify }  = require('../utils/notify')
 
 const JWT_SECRET  = process.env.JWT_SECRET  || 'vivmart_secret'
 const JWT_EXPIRES = process.env.JWT_EXPIRES_IN || '7d'
@@ -30,11 +31,32 @@ exports.register = async (req, res) => {
     const hashedPw = await bcrypt.hash(password, 12)
     const safeRole = role === 'admin' ? 'buyer' : role
 
+    // Sellers start as 'pending' — need admin approval
+    const status = safeRole === 'seller' ? 'pending' : 'active'
+
     const [result] = await pool.execute(
-      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-      [name, email, hashedPw, safeRole]
+      'INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)',
+      [name, email, hashedPw, safeRole, status]
     )
 
+    if (safeRole === 'seller') {
+      // Notify all admins about new seller registration
+      const [admins] = await pool.execute("SELECT id FROM users WHERE role = 'admin'")
+      for (const admin of admins) {
+        await notify(admin.id, 'seller_pending',
+          'New Seller Registration',
+          `${name} (${email}) has registered as a seller and is awaiting approval.`,
+          { sellerId: result.insertId, sellerName: name, sellerEmail: email }
+        )
+      }
+      return res.status(201).json({
+        success: true,
+        pending: true,
+        message: 'Registration successful! Your seller account is pending admin approval. You will be notified once approved.',
+      })
+    }
+
+    // Buyers get immediate access
     const user  = { id: result.insertId, name, email, role: safeRole }
     const token = signToken(user)
     return res.status(201).json({ success: true, user, token })
@@ -51,10 +73,12 @@ exports.login = async (req, res) => {
     return res.status(400).json({ success: false, message: errors.array()[0].msg })
 
   const { email, password } = req.body
+  console.log('Login attempt:', email)
 
   try {
     const pool   = getPool()
     const [rows] = await pool.execute('SELECT * FROM users WHERE email = ?', [email])
+    console.log('Found users:', rows.length, rows[0]?.email, rows[0]?.role)
     if (!rows.length)
       return res.status(401).json({ success: false, message: 'Invalid email or password' })
 
@@ -63,8 +87,22 @@ exports.login = async (req, res) => {
     if (!valid)
       return res.status(401).json({ success: false, message: 'Invalid email or password' })
 
-    if (dbUser.status === 'suspended')
-      return res.status(403).json({ success: false, message: 'Account suspended. Contact support.' })
+    // Admin always gets access regardless of status
+    if (dbUser.role !== 'admin') {
+      // Seller pending approval
+      if (dbUser.role === 'seller' && dbUser.status === 'pending')
+        return res.status(403).json({
+          success: false,
+          pending: true,
+          message: 'Your seller account is pending admin approval. Please wait for approval.',
+        })
+
+      if (dbUser.status === 'suspended')
+        return res.status(403).json({ success: false, message: 'Account suspended. Contact support.' })
+
+      if (dbUser.status === 'rejected')
+        return res.status(403).json({ success: false, message: 'Your seller application was rejected. Contact support.' })
+    }
 
     const user  = { id: dbUser.id, name: dbUser.name, email: dbUser.email, role: dbUser.role }
     const token = signToken(user)
@@ -82,7 +120,7 @@ exports.getProfile = async (req, res) => {
   try {
     const pool   = getPool()
     const [rows] = await pool.execute(
-      'SELECT id, name, email, role, phone, avatar_url, created_at, last_login FROM users WHERE id = ?',
+      'SELECT id, name, email, role, phone, avatar_url, status, created_at, last_login FROM users WHERE id = ?',
       [req.user.id]
     )
     if (!rows.length)

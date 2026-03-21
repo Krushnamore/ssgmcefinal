@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
-import { Bell, X, CheckCheck, Package, Truck, CheckCircle, XCircle, Phone, Video, ShoppingBag, Trash2 } from 'lucide-react'
+import { Bell, X, CheckCheck, Package, Truck, CheckCircle, XCircle, Phone, Video, ShoppingBag, Trash2, Store } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api'
 
@@ -14,6 +14,9 @@ const TYPE_CONFIG = {
   call_accepted:   { icon: Phone,       color: 'bg-green-100 text-green-600',   label: 'Call' },
   call_rejected:   { icon: Phone,       color: 'bg-red-100 text-red-600',       label: 'Call' },
   live_started:    { icon: Video,       color: 'bg-red-100 text-red-600',       label: 'Live' },
+  seller_pending:  { icon: Store,       color: 'bg-yellow-100 text-yellow-600', label: 'Approval' },
+  seller_approved: { icon: CheckCircle, color: 'bg-green-100 text-green-600',   label: 'Approved' },
+  seller_rejected: { icon: XCircle,     color: 'bg-red-100 text-red-600',       label: 'Rejected' },
 }
 
 const NAV_MAP = {
@@ -24,6 +27,7 @@ const NAV_MAP = {
   order_cancelled: (d, role) => `/${role}/orders`,
   new_order:       ()        => '/seller/orders',
   call_request:    ()        => '/seller/calls',
+  seller_pending:  ()        => '/admin/sellers',
   call_accepted:   ()        => '/buyer/products',
   live_started:    ()        => '/buyer/live',
 }

@@ -99,3 +99,59 @@ exports.getAdminStats = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch stats' })
   }
 }
+
+/* ─── GET pending sellers ──────────────────────────── */
+exports.getPendingSellers = async (req, res) => {
+  try {
+    const pool = getPool()
+    const [rows] = await pool.execute(
+      `SELECT id, name, email, status, created_at FROM users
+       WHERE role = 'seller' AND status = 'pending'
+       ORDER BY created_at DESC`
+    )
+    return res.json({ success: true, sellers: rows })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch pending sellers' })
+  }
+}
+
+/* ─── Approve seller ───────────────────────────────── */
+exports.approveSeller = async (req, res) => {
+  try {
+    const pool = getPool()
+    const [rows] = await pool.execute('SELECT * FROM users WHERE id = ? AND role = ?', [req.params.id, 'seller'])
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Seller not found' })
+
+    await pool.execute("UPDATE users SET status = 'active' WHERE id = ?", [req.params.id])
+
+    // Notify seller
+    const { notify } = require('../utils/notify')
+    await notify(req.params.id, 'seller_approved',
+      '🎉 Seller Account Approved!',
+      'Your seller account has been approved by admin. You can now login and start selling!',
+      {}
+    )
+    return res.json({ success: true, message: 'Seller approved successfully' })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to approve seller' })
+  }
+}
+
+/* ─── Reject seller ────────────────────────────────── */
+exports.rejectSeller = async (req, res) => {
+  const { reason } = req.body
+  try {
+    const pool = getPool()
+    await pool.execute("UPDATE users SET status = 'rejected' WHERE id = ?", [req.params.id])
+
+    const { notify } = require('../utils/notify')
+    await notify(req.params.id, 'seller_rejected',
+      'Seller Application Rejected',
+      reason || 'Your seller application was not approved. Contact support for more info.',
+      {}
+    )
+    return res.json({ success: true, message: 'Seller rejected' })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to reject seller' })
+  }
+}

@@ -16,6 +16,6 @@ router.post('/', authenticate, authorize('seller', 'admin'), [
 ], ctrl.createProduct)
 
 router.put('/:id', authenticate, authorize('seller', 'admin'), ctrl.updateProduct)
-router.delete('/:id', authenticate, authorize('admin'), ctrl.deleteProduct)
+router.delete('/:id', authenticate, authorize('seller','admin'), ctrl.deleteProduct)
 
 module.exports = router

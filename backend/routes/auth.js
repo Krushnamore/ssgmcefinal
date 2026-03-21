@@ -13,7 +13,7 @@ router.post('/register', [
 ], ctrl.register)
 
 router.post('/login', [
-  body('email').isEmail().normalizeEmail().withMessage('Enter a valid email'),
+  body('email').isEmail().withMessage('Enter a valid email'),
   body('password').notEmpty().withMessage('Password is required'),
 ], ctrl.login)
 

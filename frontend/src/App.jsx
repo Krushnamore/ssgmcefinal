@@ -61,9 +61,9 @@ const AppRoutes = () => {
     <Routes>
       {/* Public */}
       <Route path="/"         element={<LandingPage/>}/>
-      <Route path="/login"    element={loading ? <Loader/> : isAuthenticated
+      <Route path="/login"    element={isAuthenticated
         ? <Navigate to={`/${user?.role}`} replace/> : <LoginPage/>}/>
-      <Route path="/register" element={loading ? <Loader/> : isAuthenticated
+      <Route path="/register" element={isAuthenticated
         ? <Navigate to={`/${user?.role}`} replace/> : <RegisterPage/>}/>
 
       {/* Buyer */}
